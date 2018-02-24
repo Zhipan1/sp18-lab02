@@ -35,6 +35,7 @@ contract Betting {
     mapping (address => uint) winnings;
     /* Keep track of all outcomes (maps index to numerical outcome) */
     mapping (uint => uint) public outcomes;
+    /* Keep track of number of outcomes */
     uint public numOutcomes;
 
     /* Add any events you think are necessary */
@@ -52,7 +53,7 @@ contract Betting {
     }
     modifier outcomeExists(uint outcome) {
         bool exists = false;
-        for (int i = 0; i < numOutcomes; i++) {
+        for (uint i = 0; i < numOutcomes; i++) {
             if (outcomes[i] == outcome) {
                 exists = true;
                 break;
@@ -74,20 +75,20 @@ contract Betting {
     function makeBet(uint _outcome) public outcomeExists(_outcome) payable returns (bool) {
         require(msg.sender != oracle);
         require(msg.sender != owner);
-        require(msg.amount > 0);
-        Bet bet = Bet({ outcome: _outcome, amount: msg.amount, initialized: true });
+        require(msg.value > 0);
+        Bet memory bet = Bet({ outcome: _outcome, amount: msg.value, initialized: true });
 
-        if (!gamblerA) {
+        if (gamblerA == address(0)) {
             gamblerA = msg.sender;
             bets[gamblerA] = bet;
             BetMade(gamblerA);
-        } else if (!gamblerB) {
+        } else if (gamblerB == address(0)) {
             require(msg.sender != gamblerA);
 
             // From spec: If all gamblers bet on the same outcome, reimburse all gamblers their funds
             // exploit: gamblerB bets on whatever outcome gamblerA chooses to reset the contract
             if (bets[gamblerA].outcome == _outcome) {
-                contractReset()
+                contractReset();
                 return false;
             }
 
@@ -104,6 +105,7 @@ contract Betting {
 
     /* The oracle chooses which outcome wins */
     function makeDecision(uint _outcome) public oracleOnly() outcomeExists(_outcome) {
+        require(gamblerA > address(0) && gamblerB > address(0));
         uint totalStake = bets[gamblerA].amount + bets[gamblerB].amount;
         if (bets[gamblerA].outcome == _outcome) {
             winnings[gamblerA] = totalStake;
@@ -118,7 +120,7 @@ contract Betting {
     function withdraw(uint withdrawAmount) public returns (uint) {
         require(withdrawAmount > 0);
         require(winnings[msg.sender] >= withdrawAmount);
-        msg.sender.send(withdrawAmount);
+        msg.sender.transfer(withdrawAmount);
         winnings[msg.sender] -= withdrawAmount;
     }
 
@@ -136,7 +138,7 @@ contract Betting {
     function contractReset() public ownerOnly() {
         delete(gamblerA);
         delete(gamblerB);
-        delete(bets);
-        delete(winnings);
+        delete(bets[0]);
+        delete(bets[1]);
     }
 }
